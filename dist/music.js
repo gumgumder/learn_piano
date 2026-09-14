@@ -15,21 +15,30 @@ export function makePool(low,high,black){
   }
   return notes;
 }
-export function drawRound(pool,random=Math.random){
+export function drawRound(pool,count=5,random=Math.random){
   if(!pool.length)throw new Error('Leerer Tonbereich');
   let previous=-1;
-  return Array.from({length:5},()=>{
+  return Array.from({length:count},()=>{
     const choices=pool.length>1?pool.filter(p=>p[0].midi!==previous):pool;
     const variants=choices[Math.floor(random()*choices.length)];
     const note=variants[Math.floor(random()*variants.length)];previous=note.midi;return note;
   });
 }
-export function staffSvg(note){
+export function staffSvg(note,playedNote=null){
   // E4 = bottom line (y=160); G4 = treble-clef anchor (y=140).
-  const y=160-(note.step-30)*10;
+  const noteY=n=>160-(n.step-30)*10;
+  const y=noteY(note),playedY=playedNote?noteY(playedNote):y;
   const line=(y,x1=28,x2=332)=>`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="currentColor" stroke-width="1.2"/>`;
-  let ledgers='';for(let s=28;s>=note.step;s-=2)ledgers+=line(160-(s-30)*10,205,251);
-  for(let s=40;s<=note.step;s+=2)ledgers+=line(160-(s-30)*10,205,251);
-  const stem=note.step>=34?`<line x1="217" y1="${y}" x2="217" y2="${y+65}" stroke="currentColor" stroke-width="2"/>`:`<line x1="239" y1="${y}" x2="239" y2="${y-65}" stroke="currentColor" stroke-width="2"/>`;
-  return `<svg viewBox="0 ${Math.min(15,y-80)} 360 ${Math.max(225,y+80)-Math.min(15,y-80)}" role="img" aria-label="Eine Note im Violinschlüssel. Die Lösung lässt sich mit dem Button aufdecken." style="color:#203943">${[80,100,120,140,160].map(v=>line(v)).join('')}<text x="43" y="140" font-family="Bravura" font-size="80">&#xE050;</text>${ledgers}${note.accidental?`<text x="183" y="${y+10}" font-family="serif" font-size="34">${note.accidental}</text>`:''}<ellipse cx="228" cy="${y}" rx="12" ry="8.5" transform="rotate(-20 228 ${y})" fill="currentColor"/>${stem}</svg>`;
+  function glyph(n,x){
+    const y=noteY(n);
+    let ledgers='';
+    for(let s=28;s>=n.step;s-=2)ledgers+=line(160-(s-30)*10,x-23,x+23);
+    for(let s=40;s<=n.step;s+=2)ledgers+=line(160-(s-30)*10,x-23,x+23);
+    const down=n.step>=34,stemX=x+(down?-11:11);
+    const stem=`<line x1="${stemX}" y1="${y}" x2="${stemX}" y2="${y+(down?65:-65)}" stroke="currentColor" stroke-width="2"/>`;
+    return `${ledgers}${n.accidental?`<text x="${x-45}" y="${y+10}" font-family="serif" font-size="34">${n.accidental}</text>`:''}<ellipse cx="${x}" cy="${y}" rx="12" ry="8.5" transform="rotate(-20 ${x} ${y})" fill="currentColor"/>${stem}`;
+  }
+  const top=Math.min(15,y-80,playedY-80),bottom=Math.max(225,y+80,playedY+80);
+  const description=playedNote?`Gesucht: ${note.name}${note.octave}. Rot daneben gespielt: ${playedNote.name}${playedNote.octave}.`:'Eine Note im Violinschlüssel. Die Lösung lässt sich aufdecken oder am Klavier spielen.';
+  return `<svg viewBox="0 ${top} 360 ${bottom-top}" role="img" aria-label="${description}" style="color:#203943">${[80,100,120,140,160].map(v=>line(v)).join('')}<text x="43" y="140" font-family="Bravura" font-size="80">&#xE050;</text><g data-note="target">${glyph(note,228)}</g>${playedNote?`<g data-note="played" style="color:#c12d39">${glyph(playedNote,306)}</g>`:''}</svg>`;
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Klaviernoten · Dein Notentrainer</title>
-  <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Fünf zufällige Noten pro Runde, in deinem Tonbereich.">
+  <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Zufällige Noten in deinem Tonbereich, mit frei wählbarer Rundenlänge.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
@@ -11,32 +11,72 @@
 <body>
   <header><a href="./" aria-label="Klaviernoten Startseite"><span class="brand-icon" aria-hidden="true">♩</span> Klaviernoten</a><span class="header-note">Ein Ton nach dem anderen.</span></header>
   <main>
-    <section id="setup" aria-labelledby="setup-title">
+    <section id="welcome" aria-labelledby="welcome-title">
       <div class="eyebrow">DEINE KLEINE KLAVIERPAUSE</div>
-      <h1 id="setup-title">Noten lesen.<br><span>In deinem Tempo.</span></h1>
-      <p class="intro">Fünf Noten im Violinschlüssel. Überlege dir den Namen und decke dann die Lösung auf.</p>
+      <h1 id="welcome-title">Mit oder<br><span>ohne Klavier?</span></h1>
+      <p class="intro">Wie möchtest du heute üben?</p>
+      <div class="session-choices">
+        <button id="choose-midi" class="session-choice"><strong>Mit Klavier</strong><span>Verbinden und die richtige Taste spielen.</span></button>
+        <button id="choose-manual" class="session-choice"><strong>Ohne Klavier</strong><span>Noten im Kopf benennen und auflösen.</span></button>
+      </div>
+    </section>
+    <section id="connection" hidden aria-labelledby="connection-title">
+      <button id="connection-back" class="text-button">← Zurück zur Auswahl</button>
+      <h1 id="connection-title" class="exercise-title">Verbinde dein Klavier.</h1>
+      <p class="intro">Einmal verbinden, die ganze Session üben.</p>
+        <div id="midi-panel">
+          <h2>Dein Klavier</h2>
+          <p id="connection-summary" class="connection-summary" data-state="waiting" role="status">Verbindung wird geprüft …</p>
+          <p class="hint">Bluetooth am Mac und am adsilent 2 einschalten. Wähle dein Klavier im Suchfenster von Chrome aus.</p>
+          <button id="bluetooth-connect" class="primary">Nach Bluetooth-MIDI-Geräten suchen</button>
+          <button id="bluetooth-disconnect" class="secondary" hidden>Bluetooth-Verbindung trennen</button>
+          <ol class="connection-steps" aria-label="Verbindungsfortschritt">
+            <li id="step-browser" data-state="waiting"><span>1</span><div><strong>Browser-Freigabe</strong><small id="detail-browser">Suche noch nicht gestartet</small></div></li>
+            <li id="step-device" data-state="waiting"><span>2</span><div><strong>Klavier finden & verbinden</strong><small id="detail-device">Noch kein Gerät ausgewählt</small></div></li>
+            <li id="step-stream" data-state="waiting"><span>3</span><div><strong>Tastendrücke empfangen</strong><small id="detail-stream">Warte auf Verbindung</small></div></li>
+          </ol>
+          <p id="connection-help" class="hint">Die Suche findet im Chrome-Fenster statt. Erst nach deiner Auswahl erhält die App Zugriff auf das Gerät.</p>
+          <label class="count-setting" for="device">MIDI-Eingang<select id="device" disabled><option value="">Noch kein Gerät verbunden</option></select></label>
+          <p id="midi-status" role="status">Noch nicht verbunden.</p>
+          <details class="connection-history"><summary>Verbindungsverlauf</summary><ol id="connection-log"></ol></details>
+          <p id="midi-test" class="hint" aria-live="polite">Zum Testen eine Taste am Klavier drücken. Mittleres C sollte als C4 erscheinen.</p>
+        </div>
+      <button id="connection-next" class="primary" disabled hidden>Weiter →</button>
+    </section>
+    <section id="setup" hidden aria-labelledby="setup-title">
+      <div class="setup-toolbar">
+        <button id="setup-back" class="text-button">← Zurück</button>
+        <span id="setup-connection" class="connection-chip" hidden role="status"></span>
+      </div>
       <div class="panel">
-        <div class="panel-title"><h2>Deine Übung</h2><span class="badge">5 Noten</span></div>
+        <div class="panel-title"><h1 id="setup-title">Deine Übung</h1><span class="badge" id="count-badge">10 Noten</span></div>
         <fieldset><legend>Welchen Tonbereich möchtest du üben?</legend>
           <div class="range"><label for="low">Von<select id="low"></select></label><span class="range-dash" aria-hidden="true">—</span><label for="high">Bis<select id="high"></select></label></div>
           <p class="hint">C4 ist das mittlere C auf dem Klavier.</p>
         </fieldset>
+        <label class="count-setting" for="count">Noten pro Runde<input id="count" type="number" min="1" step="1" value="10" inputmode="numeric" required aria-describedby="count-error"></label>
+        <p id="count-error" role="alert" hidden>Bitte gib eine ganze Zahl ab 1 ein.</p>
         <label class="toggle-row" for="black"><span><strong>Schwarze Tasten einbeziehen</strong><small>Auch Noten mit ♯ und ♭ üben</small></span><input id="black" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
         <p id="range-error" role="alert" hidden>Der Anfangston muss tiefer als oder gleich hoch wie der Endton sein.</p>
         <button id="start" class="primary">Übung starten <span aria-hidden="true">→</span></button>
       </div>
-      <p class="footnote">Deutsche Notennamen · Violinschlüssel · Ohne Zeitdruck</p>
     </section>
     <section id="exercise" hidden aria-labelledby="exercise-title">
       <div class="exercise-top"><button class="text-button" id="back">← Einstellungen</button><span id="counter"></span></div>
       <div class="progress" id="progress" aria-hidden="true"></div>
       <h1 id="exercise-title" class="exercise-title">Welche Note ist das?</h1>
-      <p class="intro">Sag den Namen laut oder einfach im Kopf.</p>
+      <p class="intro" id="exercise-hint">Sag den Namen laut oder einfach im Kopf.</p>
       <div class="panel note-panel"><div id="staff"></div><div class="answer" id="answer" aria-live="polite"></div><button id="next" class="primary">Lösung anzeigen</button></div>
     </section>
     <section id="complete" hidden aria-labelledby="complete-title">
-      <div class="completion-symbol" aria-hidden="true">✓</div><div class="eyebrow">RUNDE GESCHAFFT</div><h1 id="complete-title">Fünf Noten.<br><span>Ein Stück weiter.</span></h1><p class="intro">Bereit für die nächste kleine Übung?</p>
-      <div class="panel"><button id="again" class="primary">Noch eine Runde <span aria-hidden="true">↻</span></button><button id="settings" class="secondary">Einstellungen ändern</button></div>
+      <div class="panel completion-panel">
+        <h1 id="complete-title">Runde beendet</h1>
+        <div id="round-stats" class="round-stats" hidden>
+          <dl><div><dt>Richtig</dt><dd id="stat-correct"></dd></div><div><dt>Ø Antwortzeit</dt><dd id="stat-time"></dd></div></dl>
+        </div>
+        <button id="again" class="primary">Noch eine Runde <span aria-hidden="true">↻</span></button>
+        <button id="settings" class="text-button completion-settings">Einstellungen ändern</button>
+      </div>
     </section>
   </main>
   <footer>Ein bisschen üben. Immer vertrauter werden.</footer>
