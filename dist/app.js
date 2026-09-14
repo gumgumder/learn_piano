@@ -1,11 +1,13 @@
 import {naturals,makePool,drawRound,staffSvg} from './music.js';
 import {keyEvent,midiName} from './midi.js';
 import {summarizeAnswers} from './round-stats.js';
+import {SONGS,noteForMidi,songScoreSvg} from './songs.js';
 import {MIDI_SERVICE,MIDI_CHARACTERISTIC,decodeBleMidi,withTimeout} from './bluetooth-midi.js';
 const $=id=>document.getElementById(id);
 let round=[],index=0,revealed=false,active=false,timer=null;
 let sessionMode=null,currentScreen='welcome';
 let answers=[],noteShownAt=0;
+let currentSong=null,songIndex=0,songWrongMidi=null,songErrors=0,songStartedAt=0,songLocked=false,songTimer=null;
 let bluetoothDevice=null,bluetoothCharacteristic=null,rememberedDevice=null,notificationsReady=false;
 let connecting=false,packetCount=0,checkingKnown=false;
 function step(id,state,detail){$('step-'+id).dataset.state=state;$('detail-'+id).textContent=detail;}
@@ -25,6 +27,7 @@ function checkConnection(){
   $('setup-connection').dataset.state=ready?'done':'waiting';
   $('setup-connection').textContent=ready?'✓ '+(bluetoothDevice.name||'adsilent'):'Nicht verbunden';
   $('setup-connection').setAttribute('aria-label',ready?'Klavier verbunden: '+(bluetoothDevice.name||'adsilent'):'Klavier nicht verbunden');
+  for(const chip of document.querySelectorAll('.connected-chip'))chip.textContent=ready?'✓ '+(bluetoothDevice.name||'adsilent'):'Nicht verbunden';
   valid();
   return ready;
 }
@@ -32,6 +35,8 @@ function clearSteps(){step('browser','waiting','Noch nicht freigegeben');step('d
 
 const held=new Set();
 const midiMode=()=>sessionMode==='midi';
+const songMode=()=>sessionMode==='song';
+const pianoMode=()=>sessionMode==='piano'||midiMode()||songMode();
 const connected=()=>!!(notificationsReady&&bluetoothCharacteristic&&bluetoothDevice?.gatt.connected);
 for(const note of naturals){for(const id of ['low','high']){const option=document.createElement('option');option.value=note.midi;option.textContent=`${note.letter}${note.octave}`;$(id).append(option);}}
 $('low').value='60';$('high').value='84';
@@ -43,7 +48,7 @@ function valid(){
   $('count-error').hidden=countOk;
   $('count').setAttribute('aria-invalid',String(!countOk));
   $('count-badge').textContent=countOk?`${count} ${count===1?'Note':'Noten'}`:'–';
-  const ready=!!sessionMode&&rangeOk&&countOk&&(!midiMode()||connected());
+  const ready=!!sessionMode&&rangeOk&&countOk&&(!pianoMode()||connected());
   $('start').disabled=!ready;
   $('again').disabled=!ready;
   return ready;
@@ -51,25 +56,105 @@ function valid(){
 $('low').addEventListener('change',valid);$('high').addEventListener('change',valid);
 $('count').addEventListener('input',valid);
 function show(id){
-  if(['setup','exercise','complete'].includes(id)){
+  if(['piano-mode-select','setup','exercise','complete','song-select','song-play','song-complete'].includes(id)){
     if(!sessionMode)id='welcome';
-    else if(midiMode()&&!connected())id='connection';
+    else if(pianoMode()&&!connected())id='connection';
   }
   currentScreen=id;
-  for(const section of ['welcome','connection','setup','exercise','complete'])$(section).hidden=section!==id;
+  for(const section of ['welcome','connection','piano-mode-select','setup','exercise','complete','song-select','song-play','song-complete'])$(section).hidden=section!==id;
 }
 function chooseSession(mode){
-  clearTimeout(timer);active=false;sessionMode=mode;
-  if(mode==='midi'){
+  clearTimeout(timer);clearTimeout(songTimer);active=false;sessionMode=mode;
+  if(pianoMode()){
     show('connection');
     if(!checkConnection()&&!connecting&&!checkingKnown)restoreKnownDevice();
   }else{show('setup');checkConnection();$('low').focus();}
 }
-function returnToWelcome(){clearTimeout(timer);active=false;show('welcome');$('choose-midi').focus();}
-$('choose-midi').addEventListener('click',()=>chooseSession('midi'));
+function returnToWelcome(){clearTimeout(timer);clearTimeout(songTimer);active=false;show('welcome');$('choose-midi').focus();}
+$('choose-midi').addEventListener('click',()=>chooseSession('piano'));
 $('choose-manual').addEventListener('click',()=>chooseSession('manual'));
-for(const id of ['connection-back','setup-back'])$(id).addEventListener('click',returnToWelcome);
-$('connection-next').addEventListener('click',()=>{if(midiMode()&&checkConnection()){show('setup');$('low').focus();}});
+for(const id of ['connection-back','piano-mode-back'])$(id).addEventListener('click',returnToWelcome);
+$('connection-next').addEventListener('click',()=>{
+  if(!pianoMode()||!checkConnection())return;
+  sessionMode='piano';show('piano-mode-select');$('choose-note-mode').focus();
+});
+$('choose-note-mode').addEventListener('click',()=>{sessionMode='midi';show('setup');$('low').focus();});
+$('choose-song-mode').addEventListener('click',()=>{sessionMode='song';show('song-select');$('song-list').querySelector('button')?.focus();});
+$('setup-back').addEventListener('click',()=>{
+  if(midiMode()){sessionMode='piano';show('piano-mode-select');}
+  else returnToWelcome();
+});
+$('song-select-back').addEventListener('click',()=>{sessionMode='piano';show('piano-mode-select');});
+
+for(const song of SONGS){
+  const card=document.createElement('article');card.className='song-card';
+  const copy=document.createElement('div');
+  const title=document.createElement('h2');title.textContent=song.title;
+  const detail=document.createElement('p');detail.textContent=song.detail;
+  copy.append(title,detail);
+  const button=document.createElement('button');button.className='primary';button.textContent='Lied starten →';button.addEventListener('click',()=>startSong(song));
+  card.append(copy,button);$('song-list').append(card);
+}
+
+function renderSong(){
+  $('song-title').textContent=currentSong.title;
+  const event=currentSong.events[songIndex];
+  const totalNotes=currentSong.events.filter(item=>item.type==='note').length;
+  const noteNumber=currentSong.events.slice(0,songIndex+1).filter(item=>item.type==='note').length;
+  $('song-counter').textContent=event?.type==='rest'?'Pause':`Note ${Math.min(noteNumber,totalNotes)} von ${totalNotes}`;
+  $('song-progress').innerHTML=`<span class="progress-fill" style="width:${100*songIndex/currentSong.events.length}%"></span>`;
+  $('song-score').innerHTML=songScoreSvg(currentSong,songIndex,songWrongMidi);
+}
+function songMidiName(midi){
+  const pitch=noteForMidi(midi,currentSong.preferFlats);
+  return pitch?`${pitch.name}${pitch.octave}`:midiName(midi);
+}
+function continueSong(){
+  if(songIndex>=currentSong.events.length){finishSong();return;}
+  renderSong();
+  const event=currentSong.events[songIndex];
+  if(event.type!=='rest'){
+    songLocked=false;
+    $('song-feedback').className='song-feedback';$('song-feedback').textContent='Spiele die markierte Note.';
+    return;
+  }
+  songLocked=true;
+  $('song-feedback').className='song-feedback rest';$('song-feedback').textContent='Pause';
+  songTimer=setTimeout(()=>{songIndex++;continueSong();},event.duration*60000/currentSong.tempo);
+}
+function startSong(song=currentSong){
+  if(!checkConnection()){show('connection');return;}
+  currentSong=song;songIndex=0;songWrongMidi=null;songErrors=0;songLocked=false;songStartedAt=performance.now();
+  clearTimeout(songTimer);active=true;show('song-play');continueSong();
+}
+function finishSong(){
+  active=false;songLocked=false;
+  $('song-complete-name').textContent=currentSong.title;
+  $('song-errors').textContent=String(songErrors);
+  $('song-time').textContent=new Intl.NumberFormat('de-AT',{maximumFractionDigits:1}).format((performance.now()-songStartedAt)/1000)+' s';
+  show('song-complete');$('song-again').focus();
+}
+function playSongKey(key){
+  if(!active||!songMode()||songLocked)return;
+  const target=currentSong.events[songIndex];
+  if(target.type!=='note')return;
+  clearTimeout(songTimer);
+  if(key.note!==target.midi){
+    songErrors++;songWrongMidi=key.note;renderSong();
+    $('song-feedback').className='song-feedback wrong';
+    $('song-feedback').textContent=`Gesucht: ${songMidiName(target.midi)} · Gespielt: ${songMidiName(key.note)} — noch einmal`;
+    songTimer=setTimeout(()=>{
+      if(!active||!songMode())return;
+      songWrongMidi=null;renderSong();$('song-feedback').className='song-feedback';$('song-feedback').textContent='Versuche dieselbe Note noch einmal.';
+    },1200);
+    return;
+  }
+  songWrongMidi=null;songIndex++;
+  continueSong();
+}
+$('song-back').addEventListener('click',()=>{clearTimeout(songTimer);active=false;show('song-select');});
+$('song-again').addEventListener('click',()=>startSong());
+$('song-choose').addEventListener('click',()=>show('song-select'));
 
 function render(){
   const note=round[index];$('counter').textContent=`Note ${index+1} von ${round.length}`;
@@ -109,6 +194,7 @@ function receive(event){
   if(held.has(id))return;held.add(id);
   step('stream','done','Tastendruck erkannt: '+midiName(key.note));
   $('midi-test').textContent=`Empfangen: ${midiName(key.note)} · Verbindung funktioniert.`;
+  if(active&&songMode()){playSongKey(key);return;}
   if(!active||!midiMode()||revealed)return;
   revealed=true;render();
   const target=round[index],correct=key.note===target.midi;
@@ -141,7 +227,7 @@ function disconnectBluetooth(){
 }
 function bluetoothLost(){
   disconnectBluetooth();
-  if(midiMode()&&currentScreen!=='welcome'){clearTimeout(timer);active=false;show('connection');}
+  if(pianoMode()&&currentScreen!=='welcome'){clearTimeout(timer);clearTimeout(songTimer);active=false;show('connection');}
   step('device','error','Bluetooth-Verbindung unterbrochen');step('stream','waiting','Keine Datenverbindung');
   $('midi-status').textContent='Verbindung verloren. Bitte erneut nach dem Klavier suchen.';
   log('Bluetooth-Verbindung unterbrochen.');checkConnection();

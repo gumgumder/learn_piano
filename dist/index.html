@@ -43,6 +43,45 @@
         </div>
       <button id="connection-next" class="primary" disabled hidden>Weiter →</button>
     </section>
+    <section id="piano-mode-select" hidden aria-labelledby="piano-mode-title">
+      <div class="setup-toolbar">
+        <button id="piano-mode-back" class="text-button">← Zurück</button>
+        <span class="connection-chip connected-chip">✓ adsilent 2</span>
+      </div>
+      <h1 id="piano-mode-title" class="exercise-title">Was möchtest du üben?</h1>
+      <div class="session-choices">
+        <button id="choose-note-mode" class="session-choice"><strong>Noten erkennen</strong><span>Eine angezeigte Note auf dem Klavier finden.</span></button>
+        <button id="choose-song-mode" class="session-choice"><strong>Lied üben</strong><span>Eine Melodie Note für Note spielen.</span></button>
+      </div>
+    </section>
+    <section id="song-select" hidden aria-labelledby="song-select-title">
+      <div class="setup-toolbar">
+        <button id="song-select-back" class="text-button">← Zurück</button>
+        <span class="connection-chip connected-chip">✓ adsilent 2</span>
+      </div>
+      <h1 id="song-select-title" class="exercise-title">Lied auswählen</h1>
+      <div id="song-list" class="song-list"></div>
+    </section>
+    <section id="song-play" hidden aria-labelledby="song-title">
+      <div class="exercise-top"><button id="song-back" class="text-button">← Lieder</button><span id="song-counter"></span></div>
+      <div class="progress" id="song-progress" aria-hidden="true"></div>
+      <h1 id="song-title" class="exercise-title"></h1>
+      <p class="intro song-instruction">Spiele die markierte Note.</p>
+      <div class="panel song-panel">
+        <div id="song-score"></div>
+        <div id="song-feedback" class="song-feedback" aria-live="polite">Bereit für die erste Note.</div>
+        <p class="rhythm-key"><span>♪</span> Achtel · <span>♩</span> Viertel · <span>♩.</span> Punktiert · <span>𝅗𝅥</span> Halbe · <span>𝅝</span> Ganze · <span>𝄽</span> Pause</p>
+      </div>
+    </section>
+    <section id="song-complete" hidden aria-labelledby="song-complete-title">
+      <div class="panel completion-panel">
+        <h1 id="song-complete-title">Lied geschafft</h1>
+        <p id="song-complete-name" class="song-complete-name"></p>
+        <dl class="song-result"><div><dt>Fehlversuche</dt><dd id="song-errors"></dd></div><div><dt>Zeit</dt><dd id="song-time"></dd></div></dl>
+        <button id="song-again" class="primary">Noch einmal <span aria-hidden="true">↻</span></button>
+        <button id="song-choose" class="text-button completion-settings">Anderes Lied</button>
+      </div>
+    </section>
     <section id="setup" hidden aria-labelledby="setup-title">
       <div class="setup-toolbar">
         <button id="setup-back" class="text-button">← Zurück</button>
