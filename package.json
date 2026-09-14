@@ -1,0 +1,1 @@
+{"name":"klaviernoten","private":true,"type":"module","scripts":{"start":"python3 -m http.server 5173 --bind 127.0.0.1 --directory dist","test":"node --test test/music.test.js"}}

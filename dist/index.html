@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Klaviernoten · Dein Notentrainer</title>
+  <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Fünf zufällige Noten pro Runde, in deinem Tonbereich.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header><a href="./" aria-label="Klaviernoten Startseite"><span class="brand-icon" aria-hidden="true">♩</span> Klaviernoten</a><span class="header-note">Ein Ton nach dem anderen.</span></header>
+  <main>
+    <section id="setup" aria-labelledby="setup-title">
+      <div class="eyebrow">DEINE KLEINE KLAVIERPAUSE</div>
+      <h1 id="setup-title">Noten lesen.<br><span>In deinem Tempo.</span></h1>
+      <p class="intro">Fünf Noten im Violinschlüssel. Überlege dir den Namen und decke dann die Lösung auf.</p>
+      <div class="panel">
+        <div class="panel-title"><h2>Deine Übung</h2><span class="badge">5 Noten</span></div>
+        <fieldset><legend>Welchen Tonbereich möchtest du üben?</legend>
+          <div class="range"><label for="low">Von<select id="low"></select></label><span class="range-dash" aria-hidden="true">—</span><label for="high">Bis<select id="high"></select></label></div>
+          <p class="hint">C4 ist das mittlere C auf dem Klavier.</p>
+        </fieldset>
+        <label class="toggle-row" for="black"><span><strong>Schwarze Tasten einbeziehen</strong><small>Auch Noten mit ♯ und ♭ üben</small></span><input id="black" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+        <p id="range-error" role="alert" hidden>Der Anfangston muss tiefer als oder gleich hoch wie der Endton sein.</p>
+        <button id="start" class="primary">Übung starten <span aria-hidden="true">→</span></button>
+      </div>
+      <p class="footnote">Deutsche Notennamen · Violinschlüssel · Ohne Zeitdruck</p>
+    </section>
+    <section id="exercise" hidden aria-labelledby="exercise-title">
+      <div class="exercise-top"><button class="text-button" id="back">← Einstellungen</button><span id="counter"></span></div>
+      <div class="progress" id="progress" aria-hidden="true"></div>
+      <h1 id="exercise-title" class="exercise-title">Welche Note ist das?</h1>
+      <p class="intro">Sag den Namen laut oder einfach im Kopf.</p>
+      <div class="panel note-panel"><div id="staff"></div><div class="answer" id="answer" aria-live="polite"></div><button id="next" class="primary">Lösung anzeigen</button></div>
+    </section>
+    <section id="complete" hidden aria-labelledby="complete-title">
+      <div class="completion-symbol" aria-hidden="true">✓</div><div class="eyebrow">RUNDE GESCHAFFT</div><h1 id="complete-title">Fünf Noten.<br><span>Ein Stück weiter.</span></h1><p class="intro">Bereit für die nächste kleine Übung?</p>
+      <div class="panel"><button id="again" class="primary">Noch eine Runde <span aria-hidden="true">↻</span></button><button id="settings" class="secondary">Einstellungen ändern</button></div>
+    </section>
+  </main>
+  <footer>Ein bisschen üben. Immer vertrauter werden.</footer>
+</body></html>
