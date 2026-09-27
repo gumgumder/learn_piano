@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Klaviernoten · Dein Notentrainer</title>
-  <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Zufällige Noten in deinem Tonbereich, mit frei wählbarer Rundenlänge.">
+  <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Zufällige Noten in deinem Tonbereich, nach Notenanzahl oder Übungszeit.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
-  <script type="module" src="app.js"></script>
+  <link rel="stylesheet" href="style.css?v=20260927-1">
+  <script type="module" src="app.js?v=20260927-1"></script>
 </head>
 <body>
   <header><a href="./" aria-label="Klaviernoten Startseite"><span class="brand-icon" aria-hidden="true">♩</span> Klaviernoten</a><span class="header-note">Ein Ton nach dem anderen.</span></header>
@@ -89,19 +89,33 @@
       </div>
       <div class="panel">
         <div class="panel-title"><h1 id="setup-title">Deine Übung</h1><span class="badge" id="count-badge">10 Noten</span></div>
+        <fieldset class="clef-setting"><legend>Welchen Notenschlüssel möchtest du üben?</legend>
+          <div class="mode-switch">
+            <label><input type="radio" name="clef" value="treble" checked><span>G-Schlüssel<small>rechte Hand</small></span></label>
+            <label><input type="radio" name="clef" value="bass"><span>F-Schlüssel<small>linke Hand</small></span></label>
+          </div>
+        </fieldset>
         <fieldset><legend>Welchen Tonbereich möchtest du üben?</legend>
           <div class="range"><label for="low">Von<select id="low"></select></label><span class="range-dash" aria-hidden="true">—</span><label for="high">Bis<select id="high"></select></label></div>
           <p class="hint">C4 ist das mittlere C auf dem Klavier.</p>
         </fieldset>
-        <label class="count-setting" for="count">Noten pro Runde<input id="count" type="number" min="1" step="1" value="10" inputmode="numeric" required aria-describedby="count-error"></label>
+        <fieldset class="duration-setting"><legend>Wie möchtest du üben?</legend>
+          <div class="mode-switch">
+            <label><input type="radio" name="practice-mode" value="count" checked><span>Nach Noten</span></label>
+            <label><input type="radio" name="practice-mode" value="time"><span>Nach Zeit</span></label>
+          </div>
+        </fieldset>
+        <label class="count-setting" id="count-setting" for="count">Noten pro Runde<input id="count" type="number" min="1" step="1" value="10" inputmode="numeric" required aria-describedby="count-error"></label>
         <p id="count-error" role="alert" hidden>Bitte gib eine ganze Zahl ab 1 ein.</p>
+        <label class="count-setting" id="minutes-setting" for="minutes" hidden>Dauer in Minuten<input id="minutes" type="number" min="1" step="1" value="5" inputmode="numeric" aria-describedby="minutes-error"></label>
+        <p id="minutes-error" role="alert" hidden>Bitte gib eine ganze Zahl ab 1 ein.</p>
         <label class="toggle-row" for="black"><span><strong>Schwarze Tasten einbeziehen</strong><small>Auch Noten mit ♯ und ♭ üben</small></span><input id="black" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
         <p id="range-error" role="alert" hidden>Der Anfangston muss tiefer als oder gleich hoch wie der Endton sein.</p>
         <button id="start" class="primary">Übung starten <span aria-hidden="true">→</span></button>
       </div>
     </section>
     <section id="exercise" hidden aria-labelledby="exercise-title">
-      <div class="exercise-top"><button class="text-button" id="back">← Einstellungen</button><span id="counter"></span></div>
+      <div class="exercise-top"><button class="text-button" id="back">← Einstellungen</button><div class="exercise-status"><span id="counter"></span><time id="practice-timer" hidden aria-label="Verbleibende Übungszeit">05:00</time></div></div>
       <div class="progress" id="progress" aria-hidden="true"></div>
       <h1 id="exercise-title" class="exercise-title">Welche Note ist das?</h1>
       <p class="intro" id="exercise-hint">Sag den Namen laut oder einfach im Kopf.</p>

@@ -1,10 +1,13 @@
-import {naturals,makePool,drawRound,staffSvg} from './music.js';
+import {naturals,makePool,drawRound,staffSvg} from './music.js?v=20260927-1';
 import {keyEvent,midiName} from './midi.js';
 import {summarizeAnswers} from './round-stats.js';
 import {SONGS,noteForMidi,songScoreSvg} from './songs.js';
 import {MIDI_SERVICE,MIDI_CHARACTERISTIC,decodeBleMidi,withTimeout} from './bluetooth-midi.js';
 const $=id=>document.getElementById(id);
 let round=[],index=0,revealed=false,active=false,timer=null;
+let practiceMode='count',practicePool=[],practiceDurationMs=0,practiceEndsAt=0,practiceClock=null;
+let practiceClef='treble';
+const clefRanges={treble:{min:48,max:96,low:60,high:84},bass:{min:36,max:72,low:36,high:60}};
 let sessionMode=null,currentScreen='welcome';
 let answers=[],noteShownAt=0;
 let currentSong=null,songIndex=0,songWrongMidi=null,songErrors=0,songStartedAt=0,songLocked=false,songTimer=null;
@@ -38,23 +41,50 @@ const midiMode=()=>sessionMode==='midi';
 const songMode=()=>sessionMode==='song';
 const pianoMode=()=>sessionMode==='piano'||midiMode()||songMode();
 const connected=()=>!!(notificationsReady&&bluetoothCharacteristic&&bluetoothDevice?.gatt.connected);
-for(const note of naturals){for(const id of ['low','high']){const option=document.createElement('option');option.value=note.midi;option.textContent=`${note.letter}${note.octave}`;$(id).append(option);}}
-$('low').value='60';$('high').value='84';
+const timedPractice=()=>practiceMode==='time';
+function populateNoteRange(){
+  const range=clefRanges[practiceClef];
+  for(const id of ['low','high']){
+    $(id).replaceChildren();
+    for(const note of naturals.filter(note=>note.midi>=range.min&&note.midi<=range.max)){
+      const option=document.createElement('option');option.value=note.midi;option.textContent=`${note.letter}${note.octave}`;$(id).append(option);
+    }
+    $(id).value=String(range[id]);
+  }
+}
+populateNoteRange();
 function valid(){
   const rangeOk=Number($('low').value)<=Number($('high').value);
   const count=Number($('count').value);
   const countOk=$('count').validity.valid&&Number.isSafeInteger(count)&&count>=1;
+  const minutes=Number($('minutes').value);
+  const minutesOk=$('minutes').validity.valid&&Number.isSafeInteger(minutes)&&minutes>=1;
   $('range-error').hidden=rangeOk;
-  $('count-error').hidden=countOk;
+  $('count-error').hidden=practiceMode!=='count'||countOk;
+  $('minutes-error').hidden=practiceMode!=='time'||minutesOk;
   $('count').setAttribute('aria-invalid',String(!countOk));
-  $('count-badge').textContent=countOk?`${count} ${count===1?'Note':'Noten'}`:'–';
-  const ready=!!sessionMode&&rangeOk&&countOk&&(!pianoMode()||connected());
+  $('minutes').setAttribute('aria-invalid',String(!minutesOk));
+  $('count-badge').textContent=practiceMode==='time'
+    ?(minutesOk?`${minutes} ${minutes===1?'Minute':'Minuten'}`:'–')
+    :(countOk?`${count} ${count===1?'Note':'Noten'}`:'–');
+  const lengthOk=practiceMode==='time'?minutesOk:countOk;
+  const ready=!!sessionMode&&rangeOk&&lengthOk&&(!pianoMode()||connected());
   $('start').disabled=!ready;
   $('again').disabled=!ready;
   return ready;
 }
-$('low').addEventListener('change',valid);$('high').addEventListener('change',valid);
+for(const id of ['low','high'])$(id).addEventListener('change',()=>{clefRanges[practiceClef][id]=Number($(id).value);valid();});
+for(const input of document.querySelectorAll('[name="clef"]'))input.addEventListener('change',()=>{
+  practiceClef=input.value;populateNoteRange();valid();
+});
 $('count').addEventListener('input',valid);
+$('minutes').addEventListener('input',valid);
+for(const input of document.querySelectorAll('[name="practice-mode"]'))input.addEventListener('change',()=>{
+  practiceMode=input.value;
+  $('count-setting').hidden=timedPractice();$('minutes-setting').hidden=!timedPractice();
+  $('count').required=!timedPractice();$('minutes').required=timedPractice();valid();
+});
+function clearPracticeClock(){clearInterval(practiceClock);practiceClock=null;}
 function show(id){
   if(['piano-mode-select','setup','exercise','complete','song-select','song-play','song-complete'].includes(id)){
     if(!sessionMode)id='welcome';
@@ -64,13 +94,13 @@ function show(id){
   for(const section of ['welcome','connection','piano-mode-select','setup','exercise','complete','song-select','song-play','song-complete'])$(section).hidden=section!==id;
 }
 function chooseSession(mode){
-  clearTimeout(timer);clearTimeout(songTimer);active=false;sessionMode=mode;
+  clearTimeout(timer);clearTimeout(songTimer);clearPracticeClock();active=false;sessionMode=mode;
   if(pianoMode()){
     show('connection');
     if(!checkConnection()&&!connecting&&!checkingKnown)restoreKnownDevice();
   }else{show('setup');checkConnection();$('low').focus();}
 }
-function returnToWelcome(){clearTimeout(timer);clearTimeout(songTimer);active=false;show('welcome');$('choose-midi').focus();}
+function returnToWelcome(){clearTimeout(timer);clearTimeout(songTimer);clearPracticeClock();active=false;show('welcome');$('choose-midi').focus();}
 $('choose-midi').addEventListener('click',()=>chooseSession('piano'));
 $('choose-manual').addEventListener('click',()=>chooseSession('manual'));
 for(const id of ['connection-back','piano-mode-back'])$(id).addEventListener('click',returnToWelcome);
@@ -157,18 +187,46 @@ $('song-again').addEventListener('click',()=>startSong());
 $('song-choose').addEventListener('click',()=>show('song-select'));
 
 function render(){
-  const note=round[index];$('counter').textContent=`Note ${index+1} von ${round.length}`;
-  $('progress').innerHTML=`<span class="progress-fill" style="width:${100*(index+(revealed?1:0))/round.length}%"></span>`;
-  $('staff').innerHTML=staffSvg(note);
+  const note=round[index];
+  $('counter').textContent=timedPractice()?`Note ${index+1}`:`Note ${index+1} von ${round.length}`;
+  $('practice-timer').hidden=!timedPractice();
+  if(!timedPractice())$('progress').innerHTML=`<span class="progress-fill" style="width:${100*(index+(revealed?1:0))/round.length}%"></span>`;
+  $('staff').innerHTML=staffSvg(note,null,practiceClef);
   document.querySelector('.note-panel').classList.remove('correct','incorrect');
   $('next').hidden=midiMode();
   $('exercise-hint').textContent=midiMode()?'Spiele die passende Taste – auch die Oktave zählt.':'Sag den Namen laut oder einfach im Kopf.';
   $('answer').replaceChildren();
   if(revealed){const name=document.createElement('strong');name.textContent=note.name;const octave=document.createElement('small');octave.textContent=`${note.name}${note.octave}`;$('answer').append(name,octave);}else $('answer').textContent=midiMode()?'Warte auf deinen Tastendruck …':'Erst überlegen, dann aufdecken.';
-  $('next').textContent=revealed?(index===round.length-1?'Runde abschließen':'Nächste Note →'):'Lösung anzeigen';
+  $('next').textContent=revealed?(!timedPractice()&&index===round.length-1?'Runde abschließen':'Nächste Note →'):'Lösung anzeigen';
   if(midiMode()&&!revealed)noteShownAt=performance.now();
 }
-function start(){if(midiMode()&&!checkConnection()){show('setup');return;}if(!valid())return;round=drawRound(makePool(Number($('low').value),Number($('high').value),$('black').checked),Number($('count').value));index=0;revealed=false;active=true;answers=[];$('round-stats').hidden=true;clearTimeout(timer);show('exercise');render();(midiMode()?$('back'):$('next')).focus();}
+function updatePracticeClock(){
+  if(!active||!timedPractice())return;
+  const remaining=Math.max(0,practiceEndsAt-Date.now());
+  const seconds=Math.ceil(remaining/1000),minutes=Math.floor(seconds/60);
+  $('practice-timer').textContent=`${String(minutes).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+  $('progress').innerHTML=`<span class="progress-fill" style="width:${Math.min(100,100*(practiceDurationMs-remaining)/practiceDurationMs)}%"></span>`;
+  if(remaining===0)finishPractice();
+}
+function finishPractice(){
+  if(!active)return;
+  clearTimeout(timer);clearPracticeClock();active=false;
+  $('practice-timer').textContent='00:00';
+  $('complete-title').textContent=timedPractice()?'Zeit ist um':'Runde beendet';
+  $('again').firstChild.textContent=timedPractice()?'Noch einmal ':'Noch eine Runde ';
+  showRoundStats();show('complete');$('again').focus();
+}
+function start(){
+  if(midiMode()&&!checkConnection()){show('setup');return;}if(!valid())return;
+  practicePool=makePool(Number($('low').value),Number($('high').value),$('black').checked);
+  round=drawRound(practicePool,timedPractice()?1:Number($('count').value));index=0;revealed=false;active=true;answers=[];
+  $('round-stats').hidden=true;clearTimeout(timer);clearPracticeClock();show('exercise');
+  if(timedPractice()){
+    practiceDurationMs=Number($('minutes').value)*60000;practiceEndsAt=Date.now()+practiceDurationMs;
+    practiceClock=setInterval(updatePracticeClock,250);updatePracticeClock();
+  }
+  render();(midiMode()?$('back'):$('next')).focus();
+}
 $('start').addEventListener('click',start);$('again').addEventListener('click',start);
 function showRoundStats(){
   $('round-stats').hidden=!midiMode();
@@ -180,11 +238,15 @@ function showRoundStats(){
 function advance(){
   clearTimeout(timer);
   if(!active)return;
-  if(index<round.length-1){index++;revealed=false;render();}
-  else{active=false;showRoundStats();show('complete');$('again').focus();}
+  if(timedPractice()){
+    if(Date.now()>=practiceEndsAt){finishPractice();return;}
+    const previous=round[index],choices=practicePool.length>1?practicePool.filter(notes=>notes[0].midi!==previous.midi):practicePool;
+    round.push(drawRound(choices,1)[0]);index++;revealed=false;render();
+  }else if(index<round.length-1){index++;revealed=false;render();}
+  else finishPractice();
 }
-$('next').addEventListener('click',()=>{if(!revealed){revealed=true;render();}else advance();});
-function stop(){clearTimeout(timer);active=false;show('setup');checkConnection();}
+$('next').addEventListener('click',()=>{if(timedPractice()&&Date.now()>=practiceEndsAt){finishPractice();return;}if(!revealed){revealed=true;render();}else advance();});
+function stop(){clearTimeout(timer);clearPracticeClock();active=false;show('setup');checkConnection();}
 for(const id of ['back','settings'])$(id).addEventListener('click',()=>{stop();$('start').focus();});
 function receive(event){
   const receivedAt=performance.now();
@@ -196,6 +258,7 @@ function receive(event){
   $('midi-test').textContent=`Empfangen: ${midiName(key.note)} · Verbindung funktioniert.`;
   if(active&&songMode()){playSongKey(key);return;}
   if(!active||!midiMode()||revealed)return;
+  if(timedPractice()&&Date.now()>=practiceEndsAt){finishPractice();return;}
   revealed=true;render();
   const target=round[index],correct=key.note===target.midi;
   answers.push({targetMidi:target.midi,playedMidi:key.note,correct,durationMs:Math.max(0,receivedAt-noteShownAt)});
@@ -203,7 +266,7 @@ function receive(event){
   if(!correct){
     const spellings=makePool(key.note,key.note,true)[0];
     const played=spellings.find(n=>n.accidental===target.accidental)||spellings[0];
-    $('staff').innerHTML=staffSvg(target,played);
+    $('staff').innerHTML=staffSvg(target,played,practiceClef);
   }
   $('answer').replaceChildren();
   const title=document.createElement('strong');title.textContent=correct?'Richtig!':'Nicht ganz';
@@ -227,7 +290,7 @@ function disconnectBluetooth(){
 }
 function bluetoothLost(){
   disconnectBluetooth();
-  if(pianoMode()&&currentScreen!=='welcome'){clearTimeout(timer);clearTimeout(songTimer);active=false;show('connection');}
+  if(pianoMode()&&currentScreen!=='welcome'){clearTimeout(timer);clearTimeout(songTimer);clearPracticeClock();active=false;show('connection');}
   step('device','error','Bluetooth-Verbindung unterbrochen');step('stream','waiting','Keine Datenverbindung');
   $('midi-status').textContent='Verbindung verloren. Bitte erneut nach dem Klavier suchen.';
   log('Bluetooth-Verbindung unterbrochen.');checkConnection();
