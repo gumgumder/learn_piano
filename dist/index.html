@@ -5,8 +5,8 @@
   <title>Klaviernoten · Dein Notentrainer</title>
   <meta name="description" content="Lerne Klaviernoten im Violinschlüssel. Zufällige Noten in deinem Tonbereich, nach Notenanzahl oder Übungszeit.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=20260927-1">
-  <script type="module" src="app.js?v=20260927-1"></script>
+  <link rel="stylesheet" href="style.css?v=20260927-hands">
+  <script type="module" src="app.js?v=20261005-de"></script>
 </head>
 <body>
   <header><a href="./" aria-label="Klaviernoten Startseite"><span class="brand-icon" aria-hidden="true">♩</span> Klaviernoten</a><span class="header-note">Ein Ton nach dem anderen.</span></header>
@@ -39,7 +39,7 @@
           <label class="count-setting" for="device">MIDI-Eingang<select id="device" disabled><option value="">Noch kein Gerät verbunden</option></select></label>
           <p id="midi-status" role="status">Noch nicht verbunden.</p>
           <details class="connection-history"><summary>Verbindungsverlauf</summary><ol id="connection-log"></ol></details>
-          <p id="midi-test" class="hint" aria-live="polite">Zum Testen eine Taste am Klavier drücken. Mittleres C sollte als C4 erscheinen.</p>
+          <p id="midi-test" class="hint" aria-live="polite">Zum Testen eine Taste am Klavier drücken. Das mittlere C erscheint als c¹.</p>
         </div>
       <button id="connection-next" class="primary" disabled hidden>Weiter →</button>
     </section>
@@ -70,7 +70,7 @@
       <div class="panel song-panel">
         <div id="song-score"></div>
         <div id="song-feedback" class="song-feedback" aria-live="polite">Bereit für die erste Note.</div>
-        <p class="rhythm-key"><span>♪</span> Achtel · <span>♩</span> Viertel · <span>♩.</span> Punktiert · <span>𝅗𝅥</span> Halbe · <span>𝅝</span> Ganze · <span>𝄽</span> Pause</p>
+        <p class="rhythm-key"><span>♪</span> Achtel · <span>♩</span> Viertel · <span>♩.</span> Punktiert · <span>𝅗𝅥</span> Halbe · <span>𝅝</span> Ganze · übereinander = Akkord · <span>𝄽</span> Pause</p>
       </div>
     </section>
     <section id="song-complete" hidden aria-labelledby="song-complete-title">
@@ -97,7 +97,7 @@
         </fieldset>
         <fieldset><legend>Welchen Tonbereich möchtest du üben?</legend>
           <div class="range"><label for="low">Von<select id="low"></select></label><span class="range-dash" aria-hidden="true">—</span><label for="high">Bis<select id="high"></select></label></div>
-          <p class="hint">C4 ist das mittlere C auf dem Klavier.</p>
+          <p class="hint">c¹ ist das mittlere C auf dem Klavier. Die App verwendet die deutsche Oktavschreibweise von A₂ bis c⁵.</p>
         </fieldset>
         <fieldset class="duration-setting"><legend>Wie möchtest du üben?</legend>
           <div class="mode-switch">

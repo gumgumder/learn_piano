@@ -7,4 +7,5 @@ export function keyEvent(data){
   if(type===0x80)return {note,channel:status&15,down:false};
   return null;
 }
-export function midiName(note){return ['C','Cis','D','Dis','E','F','Fis','G','Gis','A','B','H'][note%12]+(Math.floor(note/12)-1);}
+export function midiName(note){return formatMidiNote(note);}
+import {formatMidiNote} from './note-names.js';

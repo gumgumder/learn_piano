@@ -1,6 +1,13 @@
-export const LETTERS=['C','D','E','F','G','A','H'];
+import {formatGermanNote,PIANO_HIGH_MIDI,PIANO_LOW_MIDI} from './note-names.js';
+
+export const LETTERS=['C','D','E','F','G','A','B'];
 const SEMITONES=[0,2,4,5,7,9,11];
-export const naturals=Array.from({length:36},(_,i)=>({letter:LETTERS[i%7],octave:2+Math.floor(i/7),step:i+14,midi:12*(3+Math.floor(i/7))+SEMITONES[i%7]}));
+export const naturals=Array.from({length:PIANO_HIGH_MIDI-PIANO_LOW_MIDI+1},(_,i)=>PIANO_LOW_MIDI+i)
+  .filter(midi=>SEMITONES.includes(midi%12))
+  .map(midi=>{
+    const octave=Math.floor(midi/12)-1,index=SEMITONES.indexOf(midi%12);
+    return {letter:LETTERS[index],name:LETTERS[index],octave,step:octave*7+index,midi,accidental:''};
+  });
 export function makePool(low,high,black){
   const notes=[];
   for(let midi=low;midi<=high;midi++){
@@ -8,9 +15,7 @@ export function makePool(low,high,black){
     if(index>=0)notes.push([{name:LETTERS[index],octave,step:octave*7+index,midi,accidental:''}]);
     else if(black){
       const below=SEMITONES.findLastIndex(n=>n<pc),above=below+1;
-      const sharpNames=['Cis','Dis','','Fis','Gis','Ais'];
-      const flatNames={1:'Des',2:'Es',4:'Ges',5:'As',6:'B'};
-      notes.push([{name:sharpNames[below],octave,step:octave*7+below,midi,accidental:'♯'},{name:flatNames[above],octave,step:octave*7+above,midi,accidental:'♭'}]);
+      notes.push([{name:LETTERS[below],octave,step:octave*7+below,midi,accidental:'♯'},{name:LETTERS[above],octave,step:octave*7+above,midi,accidental:'♭'}]);
     }
   }
   return notes;
@@ -39,9 +44,10 @@ export function staffSvg(note,playedNote=null,clef='treble'){
     return `${ledgers}${n.accidental?`<text x="${x-45}" y="${y+10}" font-family="serif" font-size="34">${n.accidental}</text>`:''}<ellipse cx="${x}" cy="${y}" rx="12" ry="8.5" transform="rotate(-20 ${x} ${y})" fill="currentColor"/>${stem}`;
   }
   const clefName=clef==='bass'?'Bassschlüssel':'Violinschlüssel';
-  const description=playedNote?`${clefName}. Gesucht: ${note.name}${note.octave}. Rot daneben gespielt: ${playedNote.name}${playedNote.octave}.`:`Eine Note im ${clefName}. Die Lösung lässt sich aufdecken oder am Klavier spielen.`;
+  const description=playedNote?`${clefName}. Gesucht: ${formatGermanNote(note)}. Rot daneben gespielt: ${formatGermanNote(playedNote)}.`:`Eine Note im ${clefName}. Die Lösung lässt sich aufdecken oder am Klavier spielen.`;
   const clefGlyph=clef==='bass'?'&#xE062;':'&#xE050;';
   const clefY=clef==='bass'?100:140;
-  // Both clefs have fixed framing so the staff and target column never jump between notes.
-  return `<svg viewBox="0 -50 360 330" role="img" aria-label="${description}" style="color:#203943">${[80,100,120,140,160].map(v=>line(v)).join('')}<text x="43" y="${clefY}" font-family="Bravura" font-size="80">${clefGlyph}</text><g data-note="target">${glyph(note,228)}</g>${playedNote?`<g data-note="played" style="color:#c12d39">${glyph(playedNote,306)}</g>`:''}</svg>`;
+  // Keep the normal frame stable, but expand it when an outer piano key needs more ledger lines.
+  const shown=[note,playedNote].filter(Boolean),top=Math.min(-50,...shown.map(n=>noteY(n)-75)),bottom=Math.max(280,...shown.map(n=>noteY(n)+75));
+  return `<svg viewBox="0 ${top} 360 ${bottom-top}" role="img" aria-label="${description}" style="color:#203943">${[80,100,120,140,160].map(v=>line(v)).join('')}<text x="43" y="${clefY}" font-family="Bravura" font-size="80">${clefGlyph}</text><g data-note="target">${glyph(note,228)}</g>${playedNote?`<g data-note="played" style="color:#c12d39">${glyph(playedNote,306)}</g>`:''}</svg>`;
 }

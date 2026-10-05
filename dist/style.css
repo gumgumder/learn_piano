@@ -42,3 +42,9 @@
 #staff{width:min(100%,360px);height:auto;aspect-ratio:12/11;margin:auto}
 .clef-setting{margin:0 0 22px}
 .clef-setting .mode-switch small{display:block;margin-top:2px;font-size:12px;font-weight:400;color:#718089}
+
+.song-card-grand>div:first-child{flex:1;min-width:0}
+.song-hand-choice{margin-top:17px;max-width:450px}
+.song-hand-choice legend{margin-bottom:8px;color:#526e78}
+.song-hand-options{grid-template-columns:repeat(3,minmax(0,1fr))}
+.song-hand-options span{padding:10px 6px}

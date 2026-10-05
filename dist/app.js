@@ -1,16 +1,18 @@
-import {naturals,makePool,drawRound,staffSvg} from './music.js?v=20260927-1';
+import {naturals,makePool,drawRound,staffSvg} from './music.js?v=20261005-de';
 import {keyEvent,midiName} from './midi.js';
 import {summarizeAnswers} from './round-stats.js';
-import {SONGS,noteForMidi,songScoreSvg} from './songs.js';
+import {SONGS,eventMidis,practiceMidis,noteForMidi,songScoreSvg} from './songs.js?v=20261005-de';
 import {MIDI_SERVICE,MIDI_CHARACTERISTIC,decodeBleMidi,withTimeout} from './bluetooth-midi.js';
+import {formatGermanNote} from './note-names.js';
 const $=id=>document.getElementById(id);
 let round=[],index=0,revealed=false,active=false,timer=null;
 let practiceMode='count',practicePool=[],practiceDurationMs=0,practiceEndsAt=0,practiceClock=null;
 let practiceClef='treble';
-const clefRanges={treble:{min:48,max:96,low:60,high:84},bass:{min:36,max:72,low:36,high:60}};
+const clefRanges={treble:{min:21,max:108,low:60,high:84},bass:{min:21,max:108,low:36,high:60}};
 let sessionMode=null,currentScreen='welcome';
 let answers=[],noteShownAt=0;
 let currentSong=null,songIndex=0,songWrongMidi=null,songErrors=0,songStartedAt=0,songLocked=false,songTimer=null;
+let currentSongHand='both',songCorrectMidis=new Set();
 let bluetoothDevice=null,bluetoothCharacteristic=null,rememberedDevice=null,notificationsReady=false;
 let connecting=false,packetCount=0,checkingKnown=false;
 function step(id,state,detail){$('step-'+id).dataset.state=state;$('detail-'+id).textContent=detail;}
@@ -47,7 +49,7 @@ function populateNoteRange(){
   for(const id of ['low','high']){
     $(id).replaceChildren();
     for(const note of naturals.filter(note=>note.midi>=range.min&&note.midi<=range.max)){
-      const option=document.createElement('option');option.value=note.midi;option.textContent=`${note.letter}${note.octave}`;$(id).append(option);
+      const option=document.createElement('option');option.value=note.midi;option.textContent=formatGermanNote(note);$(id).append(option);
     }
     $(id).value=String(range[id]);
   }
@@ -117,44 +119,67 @@ $('setup-back').addEventListener('click',()=>{
 $('song-select-back').addEventListener('click',()=>{sessionMode='piano';show('piano-mode-select');});
 
 for(const song of SONGS){
-  const card=document.createElement('article');card.className='song-card';
+  const card=document.createElement('article');card.className='song-card'+(song.grandStaff?' song-card-grand':'');
   const copy=document.createElement('div');
   const title=document.createElement('h2');title.textContent=song.title;
   const detail=document.createElement('p');detail.textContent=song.detail;
   copy.append(title,detail);
-  const button=document.createElement('button');button.className='primary';button.textContent='Lied starten →';button.addEventListener('click',()=>startSong(song));
+  let handChoice=null;
+  if(song.grandStaff){
+    const fieldset=document.createElement('fieldset');fieldset.className='song-hand-choice';
+    const legend=document.createElement('legend');legend.textContent='Welche Hand möchtest du üben?';fieldset.append(legend);
+    const choices=document.createElement('div');choices.className='mode-switch song-hand-options';
+    for(const [value,label] of [['right','Rechts'],['left','Links'],['both','Beide']]){
+      const option=document.createElement('label');
+      const input=document.createElement('input');input.type='radio';input.name=`${song.id}-hand`;input.value=value;input.checked=value==='both';
+      const caption=document.createElement('span');caption.textContent=label;
+      option.append(input,caption);choices.append(option);
+    }
+    fieldset.append(choices);copy.append(fieldset);
+    handChoice=()=>fieldset.querySelector('input:checked').value;
+  }
+  const button=document.createElement('button');button.className='primary';button.textContent='Lied starten →';button.addEventListener('click',()=>startSong(song,handChoice?.()||'both'));
   card.append(copy,button);$('song-list').append(card);
 }
 
 function renderSong(){
   $('song-title').textContent=currentSong.title;
+  document.querySelector('.song-instruction').textContent=currentSong.grandStaff
+    ? `${{right:'Rechte Hand',left:'Linke Hand',both:'Beide Hände'}[currentSongHand]} · Türkis: offen · Grün: richtig · Rot: falsch. Akkordtöne gleichzeitig drücken.`
+    : 'Spiele die markierte Note oder alle Töne des Akkords.';
   const event=currentSong.events[songIndex];
-  const totalNotes=currentSong.events.filter(item=>item.type==='note').length;
-  const noteNumber=currentSong.events.slice(0,songIndex+1).filter(item=>item.type==='note').length;
-  $('song-counter').textContent=event?.type==='rest'?'Pause':`Note ${Math.min(noteNumber,totalNotes)} von ${totalNotes}`;
-  $('song-progress').innerHTML=`<span class="progress-fill" style="width:${100*songIndex/currentSong.events.length}%"></span>`;
-  $('song-score').innerHTML=songScoreSvg(currentSong,songIndex,songWrongMidi);
+  const playable=item=>practiceMidis(item,currentSongHand).length>0;
+  const totalNotes=currentSong.events.filter(playable).length;
+  const noteNumber=currentSong.events.slice(0,songIndex+1).filter(playable).length;
+  const expected=practiceMidis(event,currentSongHand);
+  $('song-counter').textContent=event?.type==='rest'?'Pause':`${expected.length>1?'Akkord':'Note'} ${Math.min(noteNumber,totalNotes)} von ${totalNotes}`;
+  $('song-progress').innerHTML=`<span class="progress-fill" style="width:${100*Math.max(0,noteNumber-1)/totalNotes}%"></span>`;
+  $('song-score').innerHTML=songScoreSvg(currentSong,songIndex,songWrongMidi,{hand:currentSongHand,correctMidis:songCorrectMidis});
 }
 function songMidiName(midi){
   const pitch=noteForMidi(midi,currentSong.preferFlats);
-  return pitch?`${pitch.name}${pitch.octave}`:midiName(midi);
+  return pitch?formatGermanNote(pitch):midiName(midi);
 }
 function continueSong(){
+  while(currentSong.grandStaff&&songIndex<currentSong.events.length&&!practiceMidis(currentSong.events[songIndex],currentSongHand).length) songIndex++;
   if(songIndex>=currentSong.events.length){finishSong();return;}
   renderSong();
   const event=currentSong.events[songIndex];
   if(event.type!=='rest'){
     songLocked=false;
-    $('song-feedback').className='song-feedback';$('song-feedback').textContent='Spiele die markierte Note.';
+    $('song-feedback').className='song-feedback';
+    $('song-feedback').textContent=currentSong.grandStaff
+      ? currentSongHand==='both'?'Spiele die türkis markierten Töne mit beiden Händen.':`Spiele die türkis markierten Töne der ${currentSongHand==='right'?'rechten':'linken'} Hand.`
+      : eventMidis(event).length>1?'Spiele alle Töne des markierten Akkords gleichzeitig.':'Spiele die markierte Note.';
     return;
   }
   songLocked=true;
   $('song-feedback').className='song-feedback rest';$('song-feedback').textContent='Pause';
   songTimer=setTimeout(()=>{songIndex++;continueSong();},event.duration*60000/currentSong.tempo);
 }
-function startSong(song=currentSong){
+function startSong(song=currentSong,hand=currentSongHand){
   if(!checkConnection()){show('connection');return;}
-  currentSong=song;songIndex=0;songWrongMidi=null;songErrors=0;songLocked=false;songStartedAt=performance.now();
+  currentSong=song;currentSongHand=song.grandStaff?hand:'both';songIndex=0;songWrongMidi=null;songCorrectMidis=new Set();songErrors=0;songLocked=false;songStartedAt=performance.now();
   clearTimeout(songTimer);active=true;show('song-play');continueSong();
 }
 function finishSong(){
@@ -167,23 +192,37 @@ function finishSong(){
 function playSongKey(key){
   if(!active||!songMode()||songLocked)return;
   const target=currentSong.events[songIndex];
-  if(target.type!=='note')return;
+  if(target.type==='rest')return;
   clearTimeout(songTimer);
-  if(key.note!==target.midi){
+  const expected=practiceMidis(target,currentSongHand);
+  const pressed=new Set([...held].map(id=>Number(id.split(':')[1])));
+  songCorrectMidis=new Set(expected.filter(midi=>pressed.has(midi)));
+  if(!expected.includes(key.note)){
     songErrors++;songWrongMidi=key.note;renderSong();
     $('song-feedback').className='song-feedback wrong';
-    $('song-feedback').textContent=`Gesucht: ${songMidiName(target.midi)} · Gespielt: ${songMidiName(key.note)} — noch einmal`;
+    $('song-feedback').textContent=`Gesucht: ${expected.map(songMidiName).join(' + ')} · Gespielt: ${songMidiName(key.note)} — noch einmal`;
     songTimer=setTimeout(()=>{
       if(!active||!songMode())return;
-      songWrongMidi=null;renderSong();$('song-feedback').className='song-feedback';$('song-feedback').textContent='Versuche dieselbe Note noch einmal.';
+      songWrongMidi=null;renderSong();$('song-feedback').className='song-feedback';
+      $('song-feedback').textContent=expected.length>1?'Vervollständige den Akkord.':'Versuche dieselbe Note noch einmal.';
     },1200);
     return;
   }
-  songWrongMidi=null;songIndex++;
-  continueSong();
+  if(songCorrectMidis.size<expected.length){
+    songWrongMidi=null;renderSong();
+    $('song-feedback').className='song-feedback correct';
+    $('song-feedback').textContent=`${songCorrectMidis.size} von ${expected.length} Tönen gleichzeitig gedrückt`;
+    return;
+  }
+  songWrongMidi=null;
+  if(currentSong.grandStaff){
+    songLocked=true;renderSong();
+    $('song-feedback').className='song-feedback correct';$('song-feedback').textContent='Richtig!';
+    songTimer=setTimeout(()=>{songIndex++;songCorrectMidis=new Set();continueSong();},500);
+  }else{songIndex++;songCorrectMidis=new Set();continueSong();}
 }
 $('song-back').addEventListener('click',()=>{clearTimeout(songTimer);active=false;show('song-select');});
-$('song-again').addEventListener('click',()=>startSong());
+$('song-again').addEventListener('click',()=>startSong(currentSong,currentSongHand));
 $('song-choose').addEventListener('click',()=>show('song-select'));
 
 function render(){
@@ -196,7 +235,7 @@ function render(){
   $('next').hidden=midiMode();
   $('exercise-hint').textContent=midiMode()?'Spiele die passende Taste – auch die Oktave zählt.':'Sag den Namen laut oder einfach im Kopf.';
   $('answer').replaceChildren();
-  if(revealed){const name=document.createElement('strong');name.textContent=note.name;const octave=document.createElement('small');octave.textContent=`${note.name}${note.octave}`;$('answer').append(name,octave);}else $('answer').textContent=midiMode()?'Warte auf deinen Tastendruck …':'Erst überlegen, dann aufdecken.';
+  if(revealed){const name=document.createElement('strong');name.textContent=`${note.octave>=3?note.name.toLowerCase():note.name}${note.accidental}`;const octave=document.createElement('small');octave.textContent=formatGermanNote(note);$('answer').append(name,octave);}else $('answer').textContent=midiMode()?'Warte auf deinen Tastendruck …':'Erst überlegen, dann aufdecken.';
   $('next').textContent=revealed?(!timedPractice()&&index===round.length-1?'Runde abschließen':'Nächste Note →'):'Lösung anzeigen';
   if(midiMode()&&!revealed)noteShownAt=performance.now();
 }
@@ -252,7 +291,22 @@ function receive(event){
   const receivedAt=performance.now();
   const key=keyEvent(event.data);if(!key)return;
   const id=`${key.channel}:${key.note}`;
-  if(!key.down){held.delete(id);return;}
+  if(!key.down){
+    held.delete(id);
+    if(active&&songMode()&&currentSong?.grandStaff&&!songLocked&&currentSong.events[songIndex]?.type!=='rest'){
+      const expected=practiceMidis(currentSong.events[songIndex],currentSongHand);
+      const pressed=new Set([...held].map(value=>Number(value.split(':')[1])));
+      songCorrectMidis=new Set(expected.filter(midi=>pressed.has(midi)));
+      renderSong();
+      if(songWrongMidi===null){
+        $('song-feedback').className=songCorrectMidis.size?'song-feedback correct':'song-feedback';
+        $('song-feedback').textContent=songCorrectMidis.size
+          ? `${songCorrectMidis.size} von ${expected.length} Tönen gleichzeitig gedrückt`
+          : 'Spiele die türkis markierten Töne.';
+      }
+    }
+    return;
+  }
   if(held.has(id))return;held.add(id);
   step('stream','done','Tastendruck erkannt: '+midiName(key.note));
   $('midi-test').textContent=`Empfangen: ${midiName(key.note)} · Verbindung funktioniert.`;
@@ -272,8 +326,8 @@ function receive(event){
   const title=document.createElement('strong');title.textContent=correct?'Richtig!':'Nicht ganz';
   const detail=document.createElement('small');
   detail.textContent=correct
-    ? `${target.name}${target.octave}`
-    : `Gesucht: ${target.name}${target.octave} · Gespielt: ${midiName(key.note)}`;
+    ? formatGermanNote(target)
+    : `Gesucht: ${formatGermanNote(target)} · Gespielt: ${midiName(key.note)}`;
   if(!correct)detail.className='answer-comparison';
   $('answer').append(title,detail);
   // Ignore further strikes during feedback; releasing a key never advances a round.
@@ -339,7 +393,7 @@ async function connectBluetooth(knownDevice=null){
     notificationsReady=true;
     step('stream','working','Empfang bereit. Drücke eine Taste am Klavier.');
     $('midi-status').textContent='Bluetooth-MIDI bereit: '+(chosen.name||'Klavier');
-    $('midi-test').textContent='Noch kein Tastendruck empfangen. Spiele das mittlere C – erwartet wird C4.';
+    $('midi-test').textContent='Noch kein Tastendruck empfangen. Spiele das mittlere c¹.';
     $('connection-help').hidden=true;
     $('bluetooth-disconnect').hidden=false;log('MIDI-Empfang aktiviert. Warte auf Tastendruck.');
   }catch(error){
